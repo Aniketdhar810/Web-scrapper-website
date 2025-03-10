@@ -1,4 +1,5 @@
 import { KIITPortalScraper } from "../services/scraper";
+import { KIITRealScraper } from "../services/realScraper";
 import { CaptchaSolver } from "../services/captchaSolver";
 import { ProxyManager } from "../services/proxyManager";
 import { DataProcessor } from "../services/dataProcessor";
@@ -9,6 +10,7 @@ import { StudentData, ExportOptions } from "../types";
 
 // Initialize services
 const scraper = new KIITPortalScraper();
+const realScraper = new KIITRealScraper();
 const dataProcessor = new DataProcessor();
 const encryptionService = new EncryptionService();
 const exportService = new ExportService();
@@ -28,22 +30,38 @@ export const sapPortalAPI = {
         await encryptionService.encryptCredentials(credentials);
       console.log("Credentials encrypted for secure storage");
 
-      // Attempt to login
-      const loginSuccess = await scraper.login(credentials);
+      // Try to use the real scraper first
+      try {
+        console.log("Attempting to login with real scraper...");
+        const profileData = await realScraper.login(credentials);
 
-      if (!loginSuccess) {
-        throw new Error(
-          "Login failed. Please check your credentials and try again.",
+        // Create a session with the student data
+        SessionManager.createSession("sap-session-id", profileData);
+
+        return profileData;
+      } catch (realScraperError) {
+        console.warn(
+          "Real scraper login failed, falling back to mock scraper",
+          realScraperError,
         );
+
+        // Fall back to mock scraper if real scraper fails
+        const loginSuccess = await scraper.login(credentials);
+
+        if (!loginSuccess) {
+          throw new Error(
+            "Login failed. Please check your credentials and try again.",
+          );
+        }
+
+        // Fetch student profile data
+        const profileData = await scraper.scrapeProfile();
+
+        // Create a session with the student data
+        SessionManager.createSession("sap-session-id", profileData);
+
+        return profileData;
       }
-
-      // Fetch student profile data
-      const profileData = await scraper.scrapeProfile();
-
-      // Create a session with the student data
-      SessionManager.createSession("sap-session-id", profileData);
-
-      return profileData;
     } catch (error) {
       console.error("Login error:", error);
       throw error;
@@ -62,11 +80,15 @@ export const sapPortalAPI = {
   /**
    * Fetch attendance data for the student
    */
-  getAttendance: async (): Promise<any> => {
+  getAttendance: async (
+    year: string = "2024-2025",
+    session: string = "Spring",
+  ): Promise<any> => {
     try {
       // Check if we have a cached version first
-      const cachedData = localStorage.getItem("cachedAttendance");
-      const cachedTimestamp = localStorage.getItem("cachedAttendanceTimestamp");
+      const cacheKey = `cachedAttendance_${year}_${session}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cachedTimestamp = localStorage.getItem(`${cacheKey}_timestamp`);
 
       // Use cached data if it's less than 1 hour old
       if (cachedData && cachedTimestamp) {
@@ -80,14 +102,31 @@ export const sapPortalAPI = {
         }
       }
 
-      // Fetch fresh data
-      const attendanceData = await scraper.scrapeAttendance();
+      // Try to use the real scraper first
+      try {
+        console.log("Attempting to fetch attendance with real scraper...");
+        const attendanceData = await realScraper.fetchAttendance(year, session);
 
-      // Cache the data
-      localStorage.setItem("cachedAttendance", JSON.stringify(attendanceData));
-      localStorage.setItem("cachedAttendanceTimestamp", Date.now().toString());
+        // Cache the data
+        localStorage.setItem(cacheKey, JSON.stringify(attendanceData));
+        localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
 
-      return attendanceData;
+        return attendanceData;
+      } catch (realScraperError) {
+        console.warn(
+          "Real scraper attendance fetch failed, falling back to mock scraper",
+          realScraperError,
+        );
+
+        // Fall back to mock scraper if real scraper fails
+        const attendanceData = await scraper.scrapeAttendance();
+
+        // Cache the data
+        localStorage.setItem(cacheKey, JSON.stringify(attendanceData));
+        localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
+
+        return attendanceData;
+      }
     } catch (error) {
       console.error("Attendance fetch error:", error);
       throw error;
@@ -114,12 +153,30 @@ export const sapPortalAPI = {
         }
       }
 
-      const gradesData = await scraper.scrapeGrades();
+      // Try to use the real scraper first
+      try {
+        console.log("Attempting to fetch grades with real scraper...");
+        const gradesData = await realScraper.fetchGrades();
 
-      localStorage.setItem("cachedGrades", JSON.stringify(gradesData));
-      localStorage.setItem("cachedGradesTimestamp", Date.now().toString());
+        // Cache the data
+        localStorage.setItem("cachedGrades", JSON.stringify(gradesData));
+        localStorage.setItem("cachedGradesTimestamp", Date.now().toString());
 
-      return gradesData;
+        return gradesData;
+      } catch (realScraperError) {
+        console.warn(
+          "Real scraper grades fetch failed, falling back to mock scraper",
+          realScraperError,
+        );
+
+        // Fall back to mock scraper if real scraper fails
+        const gradesData = await scraper.scrapeGrades();
+
+        localStorage.setItem("cachedGrades", JSON.stringify(gradesData));
+        localStorage.setItem("cachedGradesTimestamp", Date.now().toString());
+
+        return gradesData;
+      }
     } catch (error) {
       console.error("Grades fetch error:", error);
       throw error;
@@ -146,12 +203,30 @@ export const sapPortalAPI = {
         }
       }
 
-      const scheduleData = await scraper.scrapeSchedule();
+      // Try to use the real scraper first
+      try {
+        console.log("Attempting to fetch schedule with real scraper...");
+        const scheduleData = await realScraper.fetchSchedule();
 
-      localStorage.setItem("cachedSchedule", JSON.stringify(scheduleData));
-      localStorage.setItem("cachedScheduleTimestamp", Date.now().toString());
+        // Cache the data
+        localStorage.setItem("cachedSchedule", JSON.stringify(scheduleData));
+        localStorage.setItem("cachedScheduleTimestamp", Date.now().toString());
 
-      return scheduleData;
+        return scheduleData;
+      } catch (realScraperError) {
+        console.warn(
+          "Real scraper schedule fetch failed, falling back to mock scraper",
+          realScraperError,
+        );
+
+        // Fall back to mock scraper if real scraper fails
+        const scheduleData = await scraper.scrapeSchedule();
+
+        localStorage.setItem("cachedSchedule", JSON.stringify(scheduleData));
+        localStorage.setItem("cachedScheduleTimestamp", Date.now().toString());
+
+        return scheduleData;
+      }
     } catch (error) {
       console.error("Schedule fetch error:", error);
       throw error;
@@ -196,7 +271,18 @@ export const sapPortalAPI = {
    */
   logout: async (): Promise<void> => {
     try {
-      await scraper.logout();
+      // Try to use the real scraper first
+      try {
+        console.log("Attempting to logout with real scraper...");
+        await realScraper.logout();
+      } catch (realScraperError) {
+        console.warn(
+          "Real scraper logout failed, falling back to mock scraper",
+          realScraperError,
+        );
+        await scraper.logout();
+      }
+
       SessionManager.clearSession();
       sapPortalAPI.clearCache();
     } catch (error) {

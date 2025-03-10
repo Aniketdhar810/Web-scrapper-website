@@ -30,56 +30,71 @@ interface AttendanceSectionProps {
 }
 
 const AttendanceSection = ({
-  courses = [
-    {
-      courseCode: "CSE101",
-      courseName: "Introduction to Computer Science",
-      attendancePercentage: 85,
-      totalClasses: 24,
-      attendedClasses: 20,
-      status: "good" as const,
-      lastUpdated: "2023-06-15",
-    },
-    {
-      courseCode: "MAT201",
-      courseName: "Advanced Mathematics",
-      attendancePercentage: 72,
-      totalClasses: 18,
-      attendedClasses: 13,
-      status: "warning" as const,
-      lastUpdated: "2023-06-14",
-    },
-    {
-      courseCode: "PHY102",
-      courseName: "Physics Fundamentals",
-      attendancePercentage: 65,
-      totalClasses: 20,
-      attendedClasses: 13,
-      status: "danger" as const,
-      lastUpdated: "2023-06-13",
-    },
-    {
-      courseCode: "ENG103",
-      courseName: "Technical Communication",
-      attendancePercentage: 90,
-      totalClasses: 15,
-      attendedClasses: 14,
-      status: "good" as const,
-      lastUpdated: "2023-06-15",
-    },
-    {
-      courseCode: "CSE205",
-      courseName: "Data Structures and Algorithms",
-      attendancePercentage: 78,
-      totalClasses: 22,
-      attendedClasses: 17,
-      status: "warning" as const,
-      lastUpdated: "2023-06-14",
-    },
-  ],
+  courses = [],
   semester = "Spring 2023",
   department = "Computer Science and Engineering",
 }: AttendanceSectionProps) => {
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [attendanceData, setAttendanceData] = React.useState<
+    CourseAttendance[]
+  >([]);
+  const [year, setYear] = React.useState("2024-2025");
+  const [session, setSession] = React.useState("Spring");
+
+  React.useEffect(() => {
+    // Use the provided courses if available
+    if (courses && courses.length > 0) {
+      setAttendanceData(courses);
+      return;
+    }
+
+    // Otherwise fetch attendance data
+    const fetchAttendanceData = async () => {
+      setIsLoading(true);
+      try {
+        // Import the API dynamically to avoid circular dependencies
+        const { sapPortalAPI } = await import("../../backend/api");
+        const data = await sapPortalAPI.getAttendance(year, session);
+        setAttendanceData(data);
+      } catch (error) {
+        console.error("Failed to fetch attendance data:", error);
+        // Set some default data if fetch fails
+        setAttendanceData([
+          {
+            courseCode: "CSE101",
+            courseName: "Introduction to Computer Science",
+            attendancePercentage: 85,
+            totalClasses: 24,
+            attendedClasses: 20,
+            status: "good" as const,
+            lastUpdated: "2023-06-15",
+          },
+          {
+            courseCode: "MAT201",
+            courseName: "Advanced Mathematics",
+            attendancePercentage: 72,
+            totalClasses: 18,
+            attendedClasses: 13,
+            status: "warning" as const,
+            lastUpdated: "2023-06-14",
+          },
+          {
+            courseCode: "PHY102",
+            courseName: "Physics Fundamentals",
+            attendancePercentage: 65,
+            totalClasses: 20,
+            attendedClasses: 13,
+            status: "danger" as const,
+            lastUpdated: "2023-06-13",
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAttendanceData();
+  }, [courses, year, session]);
   const [view, setView] = useState<"card" | "list">("card");
   const [filter, setFilter] = useState<"all" | "good" | "warning" | "danger">(
     "all",
@@ -87,8 +102,8 @@ const AttendanceSection = ({
 
   const filteredCourses =
     filter === "all"
-      ? courses
-      : courses.filter((course) => course.status === filter);
+      ? attendanceData
+      : attendanceData.filter((course) => course.status === filter);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -125,7 +140,28 @@ const AttendanceSection = ({
             {semester} - {department}
           </p>
         </div>
-        <div className="flex space-x-4">
+        <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+          <div className="flex space-x-2">
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2023-2024">2023-2024</SelectItem>
+                <SelectItem value="2024-2025">2024-2025</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={session} onValueChange={setSession}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Session" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Spring">Spring</SelectItem>
+                <SelectItem value="Fall">Fall</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Select
             value={filter}
             onValueChange={(value: any) => setFilter(value)}
@@ -170,7 +206,14 @@ const AttendanceSection = ({
         </TabsList>
 
         <TabsContent value="current" className="space-y-4">
-          {view === "card" ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="flex flex-col items-center">
+                <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-gray-500">Loading attendance data...</p>
+              </div>
+            </div>
+          ) : view === "card" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredCourses.map((course, index) => (
                 <Card key={index} className="overflow-hidden">
@@ -207,6 +250,12 @@ const AttendanceSection = ({
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          ) : filteredCourses.length === 0 ? (
+            <div className="flex items-center justify-center h-64">
+              <p className="text-gray-500">
+                No attendance data available for the selected period.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">

@@ -28,25 +28,42 @@ const Home = () => {
       setIsLoading(true);
       setError(null);
 
-      // Simulate API call with timeout
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Import the API dynamically to avoid circular dependencies
+      const { sapPortalAPI } = await import("../backend/api");
 
-      // For demo purposes, we'll authenticate with any credentials
-      // In a real app, you would validate against the SAP portal API
+      // Attempt to login with the SAP portal API
       if (credentials.rollNumber && credentials.password) {
-        setIsAuthenticated(true);
-        setStudentData({
-          ...studentData,
-          name: "John Doe", // In a real app, this would come from the API
-          rollNumber: credentials.rollNumber,
-        });
+        try {
+          const userData = await sapPortalAPI.login(credentials);
+          setIsAuthenticated(true);
+          setStudentData({
+            ...studentData,
+            name: userData.name || "Student",
+            rollNumber: userData.rollNumber || credentials.rollNumber,
+            department:
+              userData.department || "Computer Science and Engineering",
+            semester: userData.semester || "Spring 2023",
+            lastUpdated: userData.lastUpdated || new Date().toLocaleString(),
+            profileImage:
+              userData.profileImage ||
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${credentials.rollNumber}`,
+          });
+        } catch (apiError: any) {
+          setErrorType(apiError.type || "login");
+          setError(
+            apiError.message ||
+              "Authentication failed. Please check your credentials and try again.",
+          );
+        }
       } else {
         setErrorType("login");
         setError("Please enter both roll number and password.");
       }
-    } catch (err) {
+    } catch (err: any) {
       setErrorType("connection");
-      setError("Failed to connect to the SAP portal. Please try again.");
+      setError(
+        err.message || "Failed to connect to the SAP portal. Please try again.",
+      );
     } finally {
       setIsLoading(false);
     }
